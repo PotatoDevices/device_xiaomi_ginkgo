@@ -1978,16 +1978,16 @@ vendor/lib64/vendor.qti.hardware.qteeconnector@1.0.so
 # Radio
 -app/datastatusnotification/datastatusnotification.apk
 -app/embms/embms.apk
--app/QtiTelephonyService/QtiTelephonyService.apk
+-app/QtiTelephonyService/QtiTelephonyService.apk|420b39e20a5166940c1e2e55e8d9c92ec910cebb
 etc/permissions/embms.xml
 etc/permissions/privapp-permissions-qti.xml
 etc/permissions/qcrilhook.xml
 etc/permissions/telephonyservice.xml
 etc/sysconfig/qti_whitelist.xml
 framework/embmslibrary.jar
-framework/qcrilhook.jar
-framework/qti-telephony-common.jar
-framework/QtiTelephonyServicelibrary.jar
+framework/qcrilhook.jar|42b8068427f83841e2809922a61403b31b661eab 
+framework/qti-telephony-common.jar|188c71ca069b72d028c4f7531328cc5dee2515ce
+framework/QtiTelephonyServicelibrary.jar|5c676733633cedc2ed8052d8b6eb1bef130f9a5f
 -priv-app/qcrilmsgtunnel/qcrilmsgtunnel.apk
 vendor/bin/ATFWD-daemon
 vendor/bin/hw/qcrild
@@ -2092,12 +2092,12 @@ vendor/radio/qcril_database/upgrade/5_version_intro.sql
 
 # Radio-IMS
 -app/imssettings/imssettings.apk
--app/uceShimService/uceShimService.apk
+-app/uceShimService/uceShimService.apk|a2de7d90c4319c0a66e565869dca741cd9799d77
 etc/permissions/com.qualcomm.qti.imscmservice-V2.0-java.xml
 etc/permissions/com.qualcomm.qti.imscmservice-V2.1-java.xml
 etc/permissions/com.qualcomm.qti.imscmservice.xml
-framework/com.qualcomm.qti.imscmservice-V2.0-java.jar
-framework/com.qualcomm.qti.imscmservice-V2.1-java.jar
+framework/com.qualcomm.qti.imscmservice-V2.0-java.jar|353f854125d3bca38027989a367b03dd5f3f2682
+framework/com.qualcomm.qti.imscmservice-V2.1-java.jar|e5cc8a2c7ff6e6d417c3727baa3d1a609cb97685
 framework/com.qualcomm.qti.uceservice-V2.0-java.jar
 framework/vendor.qti.ims.callinfo-V1.0-java.jar
 framework/vendor.qti.ims.rcsconfig-V1.0-java.jar
@@ -2131,7 +2131,7 @@ lib64/librcc.so
 lib64/vendor.qti.ims.callinfo@1.0.so
 lib64/vendor.qti.ims.rcsconfig@1.0.so
 lib64/vendor.qti.imsrtpservice@1.0.so
--priv-app/ims/ims.apk
+-priv-app/ims/ims.apk|105db9572d4cd724ce379cad8a45d16409d4915c
 vendor/bin/imsdatadaemon
 vendor/bin/imsqmidaemon
 vendor/bin/imsrcsd

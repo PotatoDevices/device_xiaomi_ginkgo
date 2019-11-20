@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -29,234 +29,102 @@
 
 #define LOG_NIDEBUG 0
 
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <dlfcn.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <pthread.h>
 #include <unistd.h>
 
 #define LOG_TAG "QTI PowerHAL"
-#include <utils/Log.h>
 #include <hardware/hardware.h>
 #include <hardware/power.h>
+#include <log/log.h>
 
-#include "utils.h"
-#include "metadata-defs.h"
 #include "hint-data.h"
+#include "metadata-defs.h"
 #include "performance.h"
 #include "power-common.h"
+#include "utils.h"
 
-#define MIN_VAL(X,Y) ((X>Y)?(Y):(X))
+#define CHECK_HANDLE(x) ((x) > 0)
 
-static int video_encode_hint_sent;
+const int kMaxLaunchDuration = 5000;      /* ms */
+const int kMaxInteractiveDuration = 5000; /* ms */
+const int kMinInteractiveDuration = 100;  /* ms */
 
-pthread_mutex_t camera_hint_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int camera_hint_ref_count;
-static void process_video_encode_hint(void *metadata);
-static void process_video_encode_hfr_hint(void *metadata);
+static int process_activity_launch_hint(void* data) {
+    static int launch_handle = -1;
+    static int launch_mode = 0;
 
-int  power_hint_override(struct power_module *module, power_hint_t hint,
-        void *data)
-{
-    switch(hint) {
-        case POWER_HINT_VSYNC:
-        {
+    // release lock early if launch has finished
+    if (!data) {
+        if (CHECK_HANDLE(launch_handle)) {
+            release_request(launch_handle);
+            launch_handle = -1;
+        }
+        launch_mode = 0;
+        return HINT_HANDLED;
+    }
+
+    if (!launch_mode) {
+        launch_handle = perf_hint_enable_with_type(VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                kMaxLaunchDuration, LAUNCH_BOOST_V1);
+        if (!CHECK_HANDLE(launch_handle)) {
+            ALOGE("Failed to perform launch boost");
+            return HINT_NONE;
+        }
+        launch_mode = 1;
+    }
+
+    return HINT_HANDLED;
+}
+
+static int process_interaction_hint(void* data) {
+    static struct timespec s_previous_boost_timespec;
+    static int s_previous_duration = 0;
+
+    struct timespec cur_boost_timespec;
+    long long elapsed_time;
+    int duration = kMinInteractiveDuration;
+
+    if (data) {
+        int input_duration = *((int*)data);
+        if (input_duration > duration) {
+            duration = (input_duration > kMaxInteractiveDuration) ?
+                    kMaxInteractiveDuration : input_duration;
+        }
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &cur_boost_timespec);
+
+    elapsed_time = calc_timespan_us(s_previous_boost_timespec, cur_boost_timespec);
+    // don't hint if previous hint's duration covers this hint's duration
+    if ((s_previous_duration * 1000) > (elapsed_time + duration * 1000)) {
+        return HINT_HANDLED;
+    }
+    s_previous_boost_timespec = cur_boost_timespec;
+    s_previous_duration = duration;
+
+    perf_hint_enable_with_type(VENDOR_HINT_SCROLL_BOOST, duration, SCROLL_VERTICAL);
+
+    return HINT_HANDLED;
+}
+
+int power_hint_override(power_hint_t hint, void* data) {
+    int ret_val = HINT_NONE;
+    switch (hint) {
+        case POWER_HINT_INTERACTION:
+            ret_val = process_interaction_hint(data);
             break;
-        }
-        case POWER_HINT_VIDEO_ENCODE:
-        {
-            process_video_encode_hint(data);
-            return HINT_HANDLED;
-        }
-        /* Using VIDEO_DECODE hint for HR use cases */
-        case POWER_HINT_VIDEO_DECODE:
-        {
-            process_video_encode_hfr_hint(data);
-            return HINT_HANDLED;
-        }
+        case POWER_HINT_LAUNCH:
+            ret_val = process_activity_launch_hint(data);
+            break;
+        default:
+            break;
     }
-    return HINT_NONE;
-}
-
-/* Video Encode Hint */
-static void process_video_encode_hint(void *metadata)
-{
-    char governor[80] = {0};
-    int resource_values[32] = {0};
-    int num_resources = 0;
-    struct video_encode_metadata_t video_encode_metadata;
-
-    ALOGI("Got process_video_encode_hint");
-
-    if (get_scaling_governor_check_cores(governor,
-        sizeof(governor),CPU0) == -1) {
-            if (get_scaling_governor_check_cores(governor,
-                sizeof(governor),CPU1) == -1) {
-                    if (get_scaling_governor_check_cores(governor,
-                        sizeof(governor),CPU2) == -1) {
-                            if (get_scaling_governor_check_cores(governor,
-                                sizeof(governor),CPU3) == -1) {
-                                    ALOGE("Can't obtain scaling governor.");
-                                    // return HINT_HANDLED;
-                            }
-                    }
-            }
-    }
-
-    /* Initialize encode metadata struct fields. */
-    memset(&video_encode_metadata, 0, sizeof(struct video_encode_metadata_t));
-    video_encode_metadata.state = -1;
-    video_encode_metadata.hint_id = DEFAULT_VIDEO_ENCODE_HINT_ID;
-
-    if (metadata) {
-        if (parse_video_encode_metadata((char *)metadata,
-            &video_encode_metadata) == -1) {
-            ALOGE("Error occurred while parsing metadata.");
-            return;
-        }
-    } else {
-        return;
-    }
-
-    if (video_encode_metadata.state == 1) {
-        if((strncmp(governor, SCHEDUTIL_GOVERNOR,
-            strlen(SCHEDUTIL_GOVERNOR)) == 0) &&
-            (strlen(governor) == strlen(SCHEDUTIL_GOVERNOR))) {
-                /* sample_ms = 20mS
-                * hispeed load for both clusters = 95
-                * sched_load_boost on all cores = -15
-                * silver max freq = 1612 */
-                int res[] = {
-                             0x41820000, 0x14,
-                             0x41440100, 0x5f,
-                             0x41440000, 0x5f,
-                             0x40C68100, 0xFFFFFFF1,
-                             0x40C68110, 0xFFFFFFF1,
-                             0x40C68120, 0xFFFFFFF1,
-                             0x40C68130, 0xFFFFFFF1,
-                             0x40C68000, 0xFFFFFFF1,
-                             0x40C68010, 0xFFFFFFF1,
-                             0x40C68020, 0xFFFFFFF1,
-                             0x40C68030, 0xFFFFFFF1,
-                             0x40804100, 0x64C,
-                            };
-                memcpy(resource_values, res, MIN_VAL(sizeof(resource_values), sizeof(res)));
-                num_resources = sizeof(res)/sizeof(res[0]);
-                pthread_mutex_lock(&camera_hint_mutex);
-                camera_hint_ref_count++;
-                if (camera_hint_ref_count == 1) {
-                    if (!video_encode_hint_sent) {
-                        perform_hint_action(video_encode_metadata.hint_id,
-                        resource_values, num_resources);
-                        video_encode_hint_sent = 1;
-                    }
-                }
-                pthread_mutex_unlock(&camera_hint_mutex);
-        }
-    } if (video_encode_metadata.state == 0) {
-        if (((strncmp(governor, INTERACTIVE_GOVERNOR,
-            strlen(INTERACTIVE_GOVERNOR)) == 0) &&
-            (strlen(governor) == strlen(INTERACTIVE_GOVERNOR))) ||
-            ((strncmp(governor, SCHEDUTIL_GOVERNOR,
-            strlen(SCHEDUTIL_GOVERNOR)) == 0) &&
-            (strlen(governor) == strlen(SCHEDUTIL_GOVERNOR)))) {
-            pthread_mutex_lock(&camera_hint_mutex);
-            camera_hint_ref_count--;
-            if (!camera_hint_ref_count) {
-                undo_hint_action(video_encode_metadata.hint_id);
-                video_encode_hint_sent = 0;
-            }
-            pthread_mutex_unlock(&camera_hint_mutex);
-            return ;
-        }
-    }
-    return;
-}
-
-/* Video Encode Hint for HFR use cases */
-static void process_video_encode_hfr_hint(void *metadata)
-{
-    char governor[80] = {0};
-    int resource_values[32] = {0};
-    int num_resources = 0;
-    struct video_encode_metadata_t video_encode_metadata;
-
-    ALOGI("Got process_video_encode_hint for HFR");
-
-    if (get_scaling_governor_check_cores(governor,
-        sizeof(governor),CPU0) == -1) {
-            if (get_scaling_governor_check_cores(governor,
-                sizeof(governor),CPU1) == -1) {
-                    if (get_scaling_governor_check_cores(governor,
-                        sizeof(governor),CPU2) == -1) {
-                            if (get_scaling_governor_check_cores(governor,
-                                sizeof(governor),CPU3) == -1) {
-                                    ALOGE("Can't obtain scaling governor.");
-                                    // return HINT_HANDLED;
-                            }
-                    }
-            }
-    }
-
-    /* Initialize encode metadata struct fields. */
-    memset(&video_encode_metadata, 0, sizeof(struct video_encode_metadata_t));
-    video_encode_metadata.state = -1;
-    video_encode_metadata.hint_id = DEFAULT_VIDEO_ENCODE_HINT_ID;
-
-    if (metadata) {
-        if (parse_video_encode_metadata((char *)metadata,
-            &video_encode_metadata) == -1) {
-            ALOGE("Error occurred while parsing metadata.");
-            return;
-        }
-    } else {
-        return;
-    }
-
-    if (video_encode_metadata.state == 1) {
-        if((strncmp(governor, SCHEDUTIL_GOVERNOR,
-            strlen(SCHEDUTIL_GOVERNOR)) == 0) &&
-            (strlen(governor) == strlen(SCHEDUTIL_GOVERNOR))) {
-                /* sample_ms = 20mS
-                * hispeed load = 95
-                * hispeed freq = 1017 */
-                int res[] = {0x41820000, 0x14,
-                             0x41440100, 0x5f,
-                             0x4143c100, 0x3f9,
-                            };
-                memcpy(resource_values, res, MIN_VAL(sizeof(resource_values), sizeof(res)));
-                num_resources = sizeof(res)/sizeof(res[0]);
-                pthread_mutex_lock(&camera_hint_mutex);
-                camera_hint_ref_count++;
-                if (camera_hint_ref_count == 1) {
-                    if (!video_encode_hint_sent) {
-                        perform_hint_action(video_encode_metadata.hint_id,
-                        resource_values, num_resources);
-                        video_encode_hint_sent = 1;
-                    }
-                }
-                pthread_mutex_unlock(&camera_hint_mutex);
-        }
-    } if (video_encode_metadata.state == 0) {
-        if (((strncmp(governor, INTERACTIVE_GOVERNOR,
-            strlen(INTERACTIVE_GOVERNOR)) == 0) &&
-            (strlen(governor) == strlen(INTERACTIVE_GOVERNOR))) ||
-            ((strncmp(governor, SCHEDUTIL_GOVERNOR,
-            strlen(SCHEDUTIL_GOVERNOR)) == 0) &&
-            (strlen(governor) == strlen(SCHEDUTIL_GOVERNOR)))) {
-            pthread_mutex_lock(&camera_hint_mutex);
-            camera_hint_ref_count--;
-            if (!camera_hint_ref_count) {
-                undo_hint_action(video_encode_metadata.hint_id);
-                video_encode_hint_sent = 0;
-            }
-            pthread_mutex_unlock(&camera_hint_mutex);
-            return ;
-        }
-    }
-    return;
+    return ret_val;
 }

@@ -29,67 +29,62 @@
 
 #define LOG_NIDEBUG 0
 
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <dlfcn.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
-#define LOG_TAG "QTI PowerHAL"
-#include <utils/Log.h>
+#define LOG_TAG "QCOM PowerHAL"
 #include <hardware/hardware.h>
 #include <hardware/power.h>
+#include <utils/Log.h>
 
-#include "utils.h"
 #include "hint-data.h"
 #include "performance.h"
 #include "power-common.h"
+#include "utils.h"
 
 static struct hint_handles handles[NUM_HINTS];
 
-void power_init()
-{
+void power_init() {
     ALOGI("Initing");
 
-    for (int i=0; i<NUM_HINTS; i++) {
-        handles[i].handle       = 0;
-        handles[i].ref_count    = 0;
+    for (int i = 0; i < NUM_HINTS; i++) {
+        handles[i].handle = 0;
+        handles[i].ref_count = 0;
     }
 }
 
-int __attribute__ ((weak)) power_hint_override(power_hint_t hint,
-        void *data)
-{
+int __attribute__((weak)) power_hint_override(power_hint_t hint, void* data) {
     return HINT_NONE;
 }
 
 /* Declare function before use */
 void interaction(int duration, int num_args, int opt_list[]);
 
-void power_hint(power_hint_t hint, void *data)
-{
+void power_hint(power_hint_t hint, void* data) {
     /* Check if this hint has been overridden. */
     if (power_hint_override(hint, data) == HINT_HANDLED) {
         /* The power_hint has been handled. We can skip the rest. */
         return;
     }
-    switch(hint) {
+
+    switch (hint) {
         case POWER_HINT_VSYNC:
-        break;
+            break;
         case POWER_HINT_VR_MODE:
             ALOGI("VR mode power hint not handled in power_hint_override");
             break;
-        case POWER_HINT_INTERACTION:
-        {
+        case POWER_HINT_INTERACTION: {
             int resources[] = {0x702, 0x20F, 0x30F};
             int duration = 3000;
 
-            interaction(duration, sizeof(resources)/sizeof(resources[0]), resources);
-        }
-        break;
+            interaction(duration, sizeof(resources) / sizeof(resources[0]), resources);
+        } break;
         //fall through below, hints will fail if not defined in powerhint.xml
         case POWER_HINT_SUSTAINED_PERFORMANCE:
         case POWER_HINT_VIDEO_ENCODE:
@@ -99,15 +94,50 @@ void power_hint(power_hint_t hint, void *data)
 
                 if (handles[hint].handle > 0)
                     handles[hint].ref_count++;
-            }
-            else
-                if (handles[hint].handle > 0)
+            } else {
+                if (handles[hint].handle > 0) {
                     if (--handles[hint].ref_count == 0) {
                         release_request(handles[hint].handle);
                         handles[hint].handle = 0;
                     }
-                else
+                } else {
                     ALOGE("Lock for hint: %X was not acquired, cannot be released", hint);
-        break;
+                }
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+int __attribute__((weak)) set_interactive_override(int on) {
+    return HINT_NONE;
+}
+
+void set_interactive(int on) {
+    if (!on) {
+        /* Send Display OFF hint to perf HAL */
+        perf_hint_enable(VENDOR_HINT_DISPLAY_OFF, 0);
+    } else {
+        /* Send Display ON hint to perf HAL */
+        perf_hint_enable(VENDOR_HINT_DISPLAY_ON, 0);
+    }
+
+    if (set_interactive_override(on) == HINT_HANDLED) {
+        return;
+    }
+
+    ALOGI("Got set_interactive hint");
+}
+
+void set_feature(feature_t feature, int state) {
+    switch (feature) {
+#ifdef TAP_TO_WAKE_NODE
+        case POWER_FEATURE_DOUBLE_TAP_TO_WAKE: {
+            sysfs_write(TAP_TO_WAKE_NODE, state ? "1" : "0");
+        } break;
+#endif
+        default:
+            break;
     }
 }

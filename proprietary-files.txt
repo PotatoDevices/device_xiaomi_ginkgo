@@ -1883,16 +1883,6 @@ vendor/lib64/vendor.display.color@1.2.so
 vendor/lib64/vendor.display.color@1.3.so
 vendor/lib64/vendor.display.postproc@1.0.so
 
-# Power-Hardware
-vendor/bin/hw/android.hardware.power@1.0-service
-vendor/etc/init/android.hardware.power@1.0-service.rc
-vendor/lib/hw/android.hardware.power@1.0-impl.so
-vendor/lib/hw/power.default.so
-vendor/lib/hw/power.qcom.so
-vendor/lib64/hw/android.hardware.power@1.0-impl.so
-vendor/lib64/hw/power.default.so
-vendor/lib64/hw/power.qcom.so
-
 # QMI
 etc/permissions/qti_libpermissions.xml|73944fe161d14ff803093a3cd0b3f3851acb0394
 etc/permissions/qti_permissions.xml

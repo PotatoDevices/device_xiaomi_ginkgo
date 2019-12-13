@@ -24,7 +24,7 @@ TARGET_2ND_CPU_VARIANT := generic
 TARGET_USES_64_BIT_BINDER := true
 
 # Assert
-TARGET_OTA_ASSERT_DEVICE := ginkgo
+TARGET_OTA_ASSERT_DEVICE := ginkgo,willow
 
 # AVB
 BOARD_AVB_ENABLE := true

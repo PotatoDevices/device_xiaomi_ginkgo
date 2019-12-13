@@ -21,6 +21,6 @@ PRODUCT_BUILD_PROP_OVERRIDES += \
     PRODUCT_NAME="ginkgo" \
     TARGET_DEVICE="ginkgo"
 
-BUILD_FINGERPRINT := xiaomi/ginkgo/ginkgo:9/PKQ1.190616.001/V10.3.3.0.PCOINXM:user/release-keys
+BUILD_FINGERPRINT := "xiaomi/ginkgo/ginkgo:9/PKQ1.190616.001/V10.3.3.0.PCOINXM:user/release-keys"
 
 PRODUCT_GMS_CLIENTID_BASE := android-xiaomi

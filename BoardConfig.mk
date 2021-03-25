@@ -125,9 +125,6 @@ TARGET_KERNEL_CONFIG := vendor/ginkgo-perf_defconfig
 
 TARGET_KERNEL_CLANG_COMPILE := true
 
-# LMKD
-TARGET_LMKD_STATS_LOG := true
-
 # NFC
 TARGET_USES_NQ_NFC := true
 

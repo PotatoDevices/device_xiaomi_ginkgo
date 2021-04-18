@@ -8,11 +8,6 @@
         "target_path":  "vendor/xiaomi/ginkgo"
     },
     {
-        "repository":   "vendor_miuicamera",
-        "target_path":  "vendor/miuicamera",
-        "branch":       "potato-a3"
-    },
-    {
         "remote":       "github",
         "repository":   "ThankYouMario/proprietary_vendor_qcom_sdclang",
         "target_path":  "prebuilts/clang/host/linux-x86/clang-sdllvm",

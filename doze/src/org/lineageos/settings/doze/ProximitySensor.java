@@ -34,10 +34,10 @@ public class ProximitySensor implements SensorEventListener {
     private static final String TAG = "ProximitySensor";
 
     // Maximum time for the hand to cover the sensor: 1s
-    private static final int HANDWAVE_MAX_DELTA_NS = 1000 * 1000 * 1000;
+    private static final int HANDWAVE_MAX_DELTA_NS = 1000000000;
 
     // Minimum time until the device is considered to have been in the pocket: 2s
-    private static final int POCKET_MIN_DELTA_NS = 2000 * 1000 * 1000;
+    private static final int POCKET_MIN_DELTA_NS = 2000000000;
 
     private SensorManager mSensorManager;
     private Sensor mSensor;

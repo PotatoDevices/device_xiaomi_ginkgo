@@ -400,6 +400,9 @@ PRODUCT_SOONG_NAMESPACES += \
     hardware/google/interfaces \
     hardware/google/pixel \
 
+PRODUCT_BOARD_PLATFORM := trinket
+PRODUCT_USES_QCOM_HARDWARE := true
+
 # Telephony
 PRODUCT_PACKAGES += \
     qti-telephony-hidl-wrapper \
